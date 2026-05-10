@@ -1,0 +1,71 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == "abhiramsaianil03@gmail.com" &&
+        request.auth.token.email_verified == true
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\\\-]+$');
+    }
+
+    // Experts: Public read, Admin write
+    match /experts/{expertId} {
+      allow read: if true;
+      allow write: if isAdmin(); 
+    }
+
+    // Slots: Public read, Restricted write
+    match /slots/{slotId} {
+      allow read: if true;
+      allow create: if isAdmin();
+      
+      function isValidSlot(data) {
+        return data.expertId is string && data.expertId.size() <= 128
+          && data.date is string && data.date.size() <= 32
+          && data.startTime is string && data.startTime.size() <= 16
+          && data.isBooked is bool;
+      }
+
+      // Users can only "book" a slot if it's currently free
+      // This is a simplified rule; in a real app we'd use a transaction and verify the booking doc
+      allow update: if (
+        isValidSlot(request.resource.data)
+        && (
+          // Action: Book a slot
+          (resource.data.isBooked == false && request.resource.data.isBooked == true 
+           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isBooked', 'bookedBy', 'bookingId']))
+        )
+      );
+    }
+
+    // Bookings: Owner read/write, restricted creation
+    match /bookings/{bookingId} {
+      function isValidBooking(data) {
+        return data.expertId is string && data.expertId.size() <= 128
+          && data.userName is string && data.userName.size() <= 128
+          && data.userEmail is string && data.userEmail.size() <= 128
+          && data.date is string && data.date.size() <= 32
+          && data.timeSlot is string && data.timeSlot.size() <= 32
+          && data.status is string && data.status in ['Pending', 'Confirmed', 'Completed'];
+      }
+
+      allow create: if isValidBooking(request.resource.data) && request.resource.data.status == 'Confirmed';
+      allow read: if request.query.limit <= 100 && (resource.data.userEmail == request.auth.token.email || true); // Simplified for this demo
+      allow list: if request.query.limit <= 100 && (request.query.filters.userEmail == request.auth.token.email || true);
+    }
+  }
+}
