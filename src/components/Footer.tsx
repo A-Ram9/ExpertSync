@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 
 interface FooterProps {
   onNavigate: (view: 'home' | 'bookings' | 'terms' | 'privacy') => void;
@@ -23,8 +23,8 @@ export function Footer({ onNavigate }: FooterProps) {
               A premium, real-time consultation booking platform connecting clients with world-class experts.
             </p>
             <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">
-              <ShieldCheck className="w-3.5 h-3.5 text-accent/60" />
-              Bookings are private &amp; owner-only
+              <Sparkles className="w-3.5 h-3.5 text-accent/60" />
+              Live demo &mdash; sample data, no sign-in required
             </div>
           </div>
 

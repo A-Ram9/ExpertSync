@@ -1,127 +1,66 @@
-import React, { useState, useEffect } from 'react';
-import { doc, getDoc, collection, query, where, onSnapshot, orderBy, runTransaction, Timestamp, addDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { Expert, Slot } from '../types';
-import { ArrowLeft, Clock, Calendar as CalendarIcon, Star, Briefcase, CheckCircle2, AlertCircle, Loader2, SearchX } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Slot } from '../types';
+import { ArrowLeft, Clock, Calendar as CalendarIcon, Star, Briefcase, MapPin, CheckCircle2, AlertCircle, Loader2, SearchX } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { format, parseISO, isAfter, startOfToday } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
+import { MOCK_EXPERTS } from '../lib/mockData';
+
+interface BookingFormData {
+  name: string;
+  email: string;
+  phone: string;
+  notes: string;
+}
 
 interface ExpertDetailProps {
   expertId: string;
-  user: any;
+  slots: Slot[];
+  onBook: (slot: Slot, data: BookingFormData) => void;
   onBack: () => void;
   onBookingSuccess: () => void;
 }
 
-export function ExpertDetail({ expertId, user, onBack, onBookingSuccess }: ExpertDetailProps) {
-  const [expert, setExpert] = useState<Expert | null>(null);
-  const [slots, setSlots] = useState<Slot[]>([]);
-  const [loading, setLoading] = useState(true);
+export function ExpertDetail({ expertId, slots, onBook, onBack, onBookingSuccess }: ExpertDetailProps) {
+  const expert = useMemo(() => MOCK_EXPERTS.find(e => e.id === expertId) ?? null, [expertId]);
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
   const [isBooking, setIsBooking] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
-  const [bookingFormData, setBookingFormData] = useState({
-    name: user?.displayName || '',
-    email: user?.email || '',
+  const [bookingFormData, setBookingFormData] = useState<BookingFormData>({
+    name: '',
+    email: '',
     phone: '',
     notes: ''
   });
 
-  useEffect(() => {
-    // Fetch expert details
-    async function fetchExpert() {
-      const docRef = doc(db, 'experts', expertId);
-      const snapshot = await getDoc(docRef);
-      if (snapshot.exists()) {
-        setExpert({ id: snapshot.id, ...snapshot.data() } as Expert);
-      }
-    }
-    fetchExpert();
-
-    // Subscribe to slots in real-time
-    const q = query(
-      collection(db, 'slots'), 
-      where('expertId', '==', expertId),
-      orderBy('date'),
-      orderBy('startTime')
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Slot));
-      // Filter out past slots
-      const today = startOfToday();
-      setSlots(data.filter(s => {
+  const upcomingSlots = useMemo(() => {
+    const today = startOfToday();
+    return slots
+      .filter(s => s.expertId === expertId)
+      .filter(s => {
         const slotDate = parseISO(s.date);
         return isAfter(slotDate, today) || s.date === format(today, 'yyyy-MM-dd');
-      }));
-      setLoading(false);
-    });
+      });
+  }, [slots, expertId]);
 
-    return () => unsubscribe();
-  }, [expertId]);
-
-  const handleBooking = async (e: React.FormEvent) => {
+  const handleBooking = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedSlot || !user) {
-       if (!user) toast.error("Please sign in to book a session");
-       return;
-    }
+    if (!selectedSlot) return;
     if (!agreedToTerms) {
       toast.error("Please accept the Terms & Conditions to continue");
       return;
     }
 
     setIsBooking(true);
-    try {
-      const slotRef = doc(db, 'slots', selectedSlot.id);
-      
-      await runTransaction(db, async (transaction) => {
-        const slotDoc = await transaction.get(slotRef);
-        if (!slotDoc.exists()) throw new Error("Slot does not exist");
-        if (slotDoc.data().isBooked) throw new Error("Slot already booked");
-
-        // 1. Create booking record
-        const bookingRef = doc(collection(db, 'bookings'));
-        transaction.set(bookingRef, {
-          expertId,
-          expertName: expert?.name,
-          userName: bookingFormData.name,
-          userEmail: bookingFormData.email,
-          userPhone: bookingFormData.phone,
-          date: selectedSlot.date,
-          timeSlot: selectedSlot.startTime,
-          notes: bookingFormData.notes,
-          status: 'Confirmed',
-          createdAt: Timestamp.now()
-        });
-
-        // 2. Update slot status
-        transaction.update(slotRef, {
-          isBooked: true,
-          bookedBy: user.email,
-          bookingId: bookingRef.id
-        });
-      });
-
+    // Simulated latency so the confirmation flow still feels real in demo mode.
+    setTimeout(() => {
+      onBook(selectedSlot, bookingFormData);
+      setIsBooking(false);
       toast.success('Session booked successfully!');
       onBookingSuccess();
-    } catch (error: any) {
-      console.error("Booking failed:", error);
-      toast.error(error.message || 'Booking failed. Please try again.');
-    } finally {
-      setIsBooking(false);
-    }
+    }, 500);
   };
-
-  if (loading) {
-    return (
-      <div className="py-20 flex justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-accent" />
-      </div>
-    );
-  }
 
   if (!expert) {
     return (
@@ -144,7 +83,7 @@ export function ExpertDetail({ expertId, user, onBack, onBookingSuccess }: Exper
 
   // Group slots by date
   const groupedSlots: { [key: string]: Slot[] } = {};
-  slots.forEach(slot => {
+  upcomingSlots.forEach(slot => {
     if (!groupedSlots[slot.date]) {
       groupedSlots[slot.date] = [];
     }
@@ -157,7 +96,7 @@ export function ExpertDetail({ expertId, user, onBack, onBookingSuccess }: Exper
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start pb-20">
       {/* Left Column: Expert Info */}
       <div className="lg:col-span-5 xl:col-span-4 space-y-8">
-        <button 
+        <button
           onClick={onBack}
           className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-text-muted hover:text-accent transition-colors mb-6 group"
         >
@@ -183,12 +122,18 @@ export function ExpertDetail({ expertId, user, onBack, onBookingSuccess }: Exper
                 <span className="text-xl font-bold">{expert.rating.toFixed(1)}</span>
               </div>
             </div>
-            
+
             <div className="flex flex-wrap gap-3 mb-8">
               <div className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-border-dim rounded-full text-[10px] font-bold uppercase tracking-widest text-text-secondary">
                 <Briefcase className="w-3.5 h-3.5 text-accent" />
                 {expert.experience}
               </div>
+              {expert.location && (
+                <div className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-border-dim rounded-full text-[10px] font-bold uppercase tracking-widest text-text-secondary">
+                  <MapPin className="w-3.5 h-3.5 text-accent" />
+                  {expert.location.city}, Oman
+                </div>
+              )}
             </div>
 
             <div className="relative">
@@ -205,7 +150,7 @@ export function ExpertDetail({ expertId, user, onBack, onBookingSuccess }: Exper
       <div className="lg:col-span-7 xl:col-span-8 space-y-10">
         <div className="bg-bg-card rounded-[2.5rem] border border-border-dim p-10 shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-accent/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-          
+
           <div className="flex items-center justify-between mb-12">
             <div className="flex items-center gap-4">
               <div className="w-14 h-14 bg-accent/10 rounded-2xl flex items-center justify-center text-accent ring-1 ring-accent/20">
@@ -236,8 +181,8 @@ export function ExpertDetail({ expertId, user, onBack, onBookingSuccess }: Exper
                       onClick={() => !slot.isBooked && setSelectedSlot(slot)}
                       className={cn(
                         "relative flex items-center justify-center p-5 rounded-2xl border transition-all duration-300 group overflow-hidden",
-                        slot.isBooked 
-                          ? "bg-bg-main/30 border-border-dim opacity-30 cursor-not-allowed line-through" 
+                        slot.isBooked
+                          ? "bg-bg-main/30 border-border-dim opacity-30 cursor-not-allowed line-through"
                           : selectedSlot?.id === slot.id
                             ? "bg-accent border-accent text-bg-main shadow-2xl shadow-accent/20 scale-[1.05]"
                             : "bg-bg-side border-border-dim text-text-primary hover:border-accent/40 hover:bg-accent/5"
@@ -270,7 +215,7 @@ export function ExpertDetail({ expertId, user, onBack, onBookingSuccess }: Exper
               className="bg-bg-side text-text-primary rounded-[2.5rem] p-10 border border-accent/30 shadow-[0_35px_60px_-15px_rgba(197,160,89,0.1)] relative overflow-hidden"
             >
               <div className="absolute top-0 right-0 w-48 h-48 bg-accent/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-              
+
               <div className="relative z-10">
                 <div className="flex items-center justify-between mb-10 pb-6 border-b border-border-dim">
                   <div>
@@ -288,88 +233,80 @@ export function ExpertDetail({ expertId, user, onBack, onBookingSuccess }: Exper
                   </button>
                 </div>
 
-                {!user ? (
-                  <div className="bg-bg-main/50 rounded-3xl p-10 border border-border-dim text-center">
-                    <AlertCircle className="w-12 h-12 mx-auto mb-4 text-accent/50" />
-                    <p className="font-serif text-xl mb-6 text-text-primary">Secured Access Required</p>
-                    <p className="text-text-secondary text-xs uppercase tracking-widest leading-loose">Please sign in to finalize your professional consultation.</p>
+                <form onSubmit={handleBooking} className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black uppercase tracking-[0.25em] text-text-muted ml-1">Full Name</label>
+                    <input
+                      required
+                      type="text"
+                      value={bookingFormData.name}
+                      onChange={(e) => setBookingFormData({...bookingFormData, name: e.target.value})}
+                      className="w-full bg-bg-main border border-border-dim rounded-xl px-5 py-4 focus:outline-none focus:border-accent transition-all placeholder:text-text-muted text-sm font-medium"
+                    />
                   </div>
-                ) : (
-                  <form onSubmit={handleBooking} className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="space-y-3">
-                      <label className="text-[10px] font-black uppercase tracking-[0.25em] text-text-muted ml-1">Full Name</label>
-                      <input 
-                        required
-                        type="text" 
-                        value={bookingFormData.name}
-                        onChange={(e) => setBookingFormData({...bookingFormData, name: e.target.value})}
-                        className="w-full bg-bg-main border border-border-dim rounded-xl px-5 py-4 focus:outline-none focus:border-accent transition-all placeholder:text-text-muted text-sm font-medium"
-                      />
-                    </div>
-                    <div className="space-y-3">
-                      <label className="text-[10px] font-black uppercase tracking-[0.25em] text-text-muted ml-1">Email (ReadOnly)</label>
-                      <input 
-                        required
-                        type="email" 
-                        readOnly
-                        value={bookingFormData.email}
-                        className="w-full bg-bg-main/50 border border-border-dim rounded-xl px-5 py-4 text-text-muted text-sm italic font-medium cursor-not-allowed"
-                      />
-                    </div>
-                    <div className="space-y-3">
-                      <label className="text-[10px] font-black uppercase tracking-[0.25em] text-text-muted ml-1">Secure Contact No.</label>
-                      <input 
-                        required
-                        type="tel" 
-                        value={bookingFormData.phone}
-                        onChange={(e) => setBookingFormData({...bookingFormData, phone: e.target.value})}
-                        className="w-full bg-bg-main border border-border-dim rounded-xl px-5 py-4 focus:outline-none focus:border-accent transition-all placeholder:text-text-muted text-sm font-medium"
-                      />
-                    </div>
-                    <div className="space-y-3 md:col-span-2">
-                      <label className="text-[10px] font-black uppercase tracking-[0.25em] text-text-muted ml-1">Brief Consultation Notes</label>
-                      <textarea 
-                        rows={3}
-                        value={bookingFormData.notes}
-                        onChange={(e) => setBookingFormData({...bookingFormData, notes: e.target.value})}
-                        placeholder="Agenda, goals, or specific questions for the expert..."
-                        className="w-full bg-bg-main border border-border-dim rounded-2xl px-5 py-4 focus:outline-none focus:border-accent transition-all resize-none placeholder:text-text-muted text-sm font-medium"
-                      />
-                    </div>
-                    
-                    <label className="md:col-span-2 flex items-start gap-3 bg-bg-main/50 border border-border-dim rounded-xl px-5 py-4 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={agreedToTerms}
-                        onChange={(e) => setAgreedToTerms(e.target.checked)}
-                        className="mt-0.5 w-4 h-4 accent-accent shrink-0"
-                      />
-                      <span className="text-xs text-text-secondary leading-relaxed">
-                        I agree to the ExpertSync{' '}
-                        <span className="text-accent font-bold">Terms &amp; Conditions</span> and{' '}
-                        <span className="text-accent font-bold">Privacy Policy</span>, and confirm the details above are accurate.
-                      </span>
-                    </label>
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black uppercase tracking-[0.25em] text-text-muted ml-1">Email</label>
+                    <input
+                      required
+                      type="email"
+                      value={bookingFormData.email}
+                      onChange={(e) => setBookingFormData({...bookingFormData, email: e.target.value})}
+                      className="w-full bg-bg-main border border-border-dim rounded-xl px-5 py-4 focus:outline-none focus:border-accent transition-all placeholder:text-text-muted text-sm font-medium"
+                    />
+                  </div>
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black uppercase tracking-[0.25em] text-text-muted ml-1">Contact No.</label>
+                    <input
+                      required
+                      type="tel"
+                      value={bookingFormData.phone}
+                      onChange={(e) => setBookingFormData({...bookingFormData, phone: e.target.value})}
+                      className="w-full bg-bg-main border border-border-dim rounded-xl px-5 py-4 focus:outline-none focus:border-accent transition-all placeholder:text-text-muted text-sm font-medium"
+                    />
+                  </div>
+                  <div className="space-y-3 md:col-span-2">
+                    <label className="text-[10px] font-black uppercase tracking-[0.25em] text-text-muted ml-1">Brief Consultation Notes</label>
+                    <textarea
+                      rows={3}
+                      value={bookingFormData.notes}
+                      onChange={(e) => setBookingFormData({...bookingFormData, notes: e.target.value})}
+                      placeholder="Agenda, goals, or specific questions for the expert..."
+                      className="w-full bg-bg-main border border-border-dim rounded-2xl px-5 py-4 focus:outline-none focus:border-accent transition-all resize-none placeholder:text-text-muted text-sm font-medium"
+                    />
+                  </div>
 
-                    <button
-                      type="submit"
-                      disabled={isBooking || !agreedToTerms}
-                      className="md:col-span-2 bg-accent text-bg-main font-black py-5 rounded-2xl flex items-center justify-center gap-4 hover:bg-accent/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-2xl shadow-accent/20 uppercase tracking-[0.3em] text-xs"
-                    >
-                      {isBooking ? (
-                        <>
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                          Finalizing...
-                        </>
-                      ) : (
-                        <>
-                          Confirm Booking
-                          <CheckCircle2 className="w-5 h-5" />
-                        </>
-                      )}
-                    </button>
-                  </form>
-                )}
+                  <label className="md:col-span-2 flex items-start gap-3 bg-bg-main/50 border border-border-dim rounded-xl px-5 py-4 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={agreedToTerms}
+                      onChange={(e) => setAgreedToTerms(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 accent-accent shrink-0"
+                    />
+                    <span className="text-xs text-text-secondary leading-relaxed">
+                      I agree to the ExpertSync{' '}
+                      <span className="text-accent font-bold">Terms &amp; Conditions</span> and{' '}
+                      <span className="text-accent font-bold">Privacy Policy</span>, and confirm the details above are accurate.
+                    </span>
+                  </label>
+
+                  <button
+                    type="submit"
+                    disabled={isBooking || !agreedToTerms}
+                    className="md:col-span-2 bg-accent text-bg-main font-black py-5 rounded-2xl flex items-center justify-center gap-4 hover:bg-accent/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-2xl shadow-accent/20 uppercase tracking-[0.3em] text-xs"
+                  >
+                    {isBooking ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Finalizing...
+                      </>
+                    ) : (
+                      <>
+                        Confirm Booking
+                        <CheckCircle2 className="w-5 h-5" />
+                      </>
+                    )}
+                  </button>
+                </form>
               </div>
             </motion.div>
           )}

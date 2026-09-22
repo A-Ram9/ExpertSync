@@ -4,35 +4,35 @@ import { ArrowLeft, ShieldCheck } from 'lucide-react';
 const SECTIONS = [
   {
     title: '1. Information We Collect',
-    body: `When you sign in, we receive your name, email address, and profile photo from Google Authentication. When you book a session, we additionally collect the phone number and consultation notes you provide.`
+    body: `ExpertSync currently runs in demo mode and does not require sign-in. When you submit a booking, we collect the name, email, phone number, and consultation notes you type into the form. If you enable location access, your device's coordinates are also read (see Section 5).`
   },
   {
     title: '2. How We Use Your Information',
-    body: `Your information is used solely to operate the booking system: creating and displaying your bookings, preventing double-booking of slots, and letting the expert you booked with prepare for your session. We do not sell your data or use it for advertising.`
+    body: `Booking details you submit are used only to populate the sample "My Bookings" ledger for this demo session and are not persisted to a server or shared with the listed experts. We do not sell your data or use it for advertising.`
   },
   {
     title: '3. Who Can See Your Data',
-    body: `Your booking records are private by default. Our security rules restrict read access to your own account — no other user, including other clients, can view your bookings, phone number, or notes. Only you and the platform administrator can access this data.`
+    body: `Because this deployment is a public showcase, the sample booking ledger (including the illustrative bookings pre-loaded for demonstration) is visible to anyone browsing the site. Do not submit real personal or sensitive information through the demo booking form.`
   },
   {
     title: '4. Data Storage & Security',
-    body: `Data is stored in Google Firebase (Firestore) with server-side security rules enforcing per-user access control. All connections are encrypted in transit. Booking creation and slot updates are validated server-side to prevent tampering or impersonation.`
+    body: `Demo bookings exist only in your browser's memory for the current session and are cleared on refresh — nothing is written to a database. The codebase includes a Firebase/Firestore integration with owner-only security rules for a future production deployment, but it is not active in this demo.`
   },
   {
-    title: '5. Data Retention',
-    body: `We retain booking records for as long as your account is active or as needed to provide the service. You may request deletion of your data by contacting the platform administrator.`
+    title: '5. Location Data',
+    body: `The "Find experts near me" feature requests your browser's geolocation permission. If granted, your coordinates are used entirely on your device to sort experts by approximate distance to their listed city in Oman. Location data is never transmitted to, or stored on, a server, and you can revoke permission at any time through your browser settings.`
   },
   {
     title: '6. Third-Party Services',
-    body: `We use Google Authentication for sign-in and Google Firebase for data storage. These providers process data under their own privacy policies, in addition to this one.`
+    body: `Expert photographs are served from Unsplash. No analytics, advertising, or tracking scripts are embedded in this demo.`
   },
   {
     title: '7. Your Rights',
-    body: `You have the right to access, correct, or request deletion of your personal data at any time. Because bookings are tied to your authenticated email, you can always view your full booking history from the "My Bookings" page.`
+    body: `Since no account or persistent profile is created in demo mode, there is no stored personal data to access or delete beyond your current browser session — simply refresh the page to clear it.`
   },
   {
     title: '8. Changes to This Policy',
-    body: `We may update this Privacy Policy periodically. Material changes will be reflected here with an updated revision note.`
+    body: `We may update this Privacy Policy periodically, including when authentication and persistent storage are reintroduced. Material changes will be reflected here with an updated revision note.`
   }
 ];
 

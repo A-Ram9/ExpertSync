@@ -18,8 +18,11 @@ export default defineConfig(({mode}) => {
     build: {
       rollupOptions: {
         output: {
+          // Firebase is intentionally excluded here: the app currently runs
+          // in demo mode (src/lib/mockData.ts) and doesn't import it, so a
+          // dedicated chunk for it would just be empty. Re-add a `firebase`
+          // entry here if live Firebase auth/Firestore is reconnected.
           manualChunks: {
-            firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore'],
             vendor: ['react', 'react-dom', 'motion'],
           },
         },

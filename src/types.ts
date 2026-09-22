@@ -6,6 +6,7 @@ export type Expert = {
   rating: number;
   bio: string;
   imageUrl: string;
+  location?: { city: string; lat: number; lng: number };
 };
 
 export type Slot = {
