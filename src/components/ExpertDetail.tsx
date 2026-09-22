@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { doc, getDoc, collection, query, where, onSnapshot, orderBy, runTransaction, Timestamp, addDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Expert, Slot } from '../types';
-import { ArrowLeft, Clock, Calendar as CalendarIcon, Star, Briefcase, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { ArrowLeft, Clock, Calendar as CalendarIcon, Star, Briefcase, CheckCircle2, AlertCircle, Loader2, SearchX } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { format, parseISO, isAfter, startOfToday } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
@@ -21,6 +21,7 @@ export function ExpertDetail({ expertId, user, onBack, onBookingSuccess }: Exper
   const [loading, setLoading] = useState(true);
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
   const [isBooking, setIsBooking] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [bookingFormData, setBookingFormData] = useState({
     name: user?.displayName || '',
     email: user?.email || '',
@@ -66,6 +67,10 @@ export function ExpertDetail({ expertId, user, onBack, onBookingSuccess }: Exper
     if (!selectedSlot || !user) {
        if (!user) toast.error("Please sign in to book a session");
        return;
+    }
+    if (!agreedToTerms) {
+      toast.error("Please accept the Terms & Conditions to continue");
+      return;
     }
 
     setIsBooking(true);
@@ -118,7 +123,24 @@ export function ExpertDetail({ expertId, user, onBack, onBookingSuccess }: Exper
     );
   }
 
-  if (!expert) return <div>Expert not found</div>;
+  if (!expert) {
+    return (
+      <div className="py-32 text-center">
+        <div className="inline-flex items-center justify-center w-24 h-24 bg-bg-card border border-border-dim rounded-full mb-6">
+          <SearchX className="w-10 h-10 text-text-muted" />
+        </div>
+        <h3 className="text-2xl font-serif text-text-primary mb-2">Expert not found</h3>
+        <p className="text-text-secondary text-sm italic mb-8">This profile may have been removed or the link is incorrect.</p>
+        <button
+          onClick={onBack}
+          className="inline-flex items-center gap-2 bg-accent text-bg-main px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-accent/90 transition-all shadow-lg shadow-accent/10"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Return to directory
+        </button>
+      </div>
+    );
+  }
 
   // Group slots by date
   const groupedSlots: { [key: string]: Slot[] } = {};
@@ -257,9 +279,10 @@ export function ExpertDetail({ expertId, user, onBack, onBookingSuccess }: Exper
                       {format(parseISO(selectedSlot.date), 'MMM do')} &bull; {selectedSlot.startTime}
                     </p>
                   </div>
-                  <button 
-                    onClick={() => setSelectedSlot(null)} 
+                  <button
+                    onClick={() => setSelectedSlot(null)}
                     className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 border border-border-dim text-text-muted hover:text-accent hover:border-accent transition-all"
+                    aria-label="Cancel selection"
                   >
                     ×
                   </button>
@@ -314,10 +337,24 @@ export function ExpertDetail({ expertId, user, onBack, onBookingSuccess }: Exper
                       />
                     </div>
                     
-                    <button 
+                    <label className="md:col-span-2 flex items-start gap-3 bg-bg-main/50 border border-border-dim rounded-xl px-5 py-4 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={agreedToTerms}
+                        onChange={(e) => setAgreedToTerms(e.target.checked)}
+                        className="mt-0.5 w-4 h-4 accent-accent shrink-0"
+                      />
+                      <span className="text-xs text-text-secondary leading-relaxed">
+                        I agree to the ExpertSync{' '}
+                        <span className="text-accent font-bold">Terms &amp; Conditions</span> and{' '}
+                        <span className="text-accent font-bold">Privacy Policy</span>, and confirm the details above are accurate.
+                      </span>
+                    </label>
+
+                    <button
                       type="submit"
-                      disabled={isBooking}
-                      className="md:col-span-2 bg-accent text-bg-main font-black py-5 rounded-2xl flex items-center justify-center gap-4 hover:bg-accent/90 transition-all disabled:opacity-50 shadow-2xl shadow-accent/20 uppercase tracking-[0.3em] text-xs"
+                      disabled={isBooking || !agreedToTerms}
+                      className="md:col-span-2 bg-accent text-bg-main font-black py-5 rounded-2xl flex items-center justify-center gap-4 hover:bg-accent/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-2xl shadow-accent/20 uppercase tracking-[0.3em] text-xs"
                     >
                       {isBooking ? (
                         <>
@@ -331,9 +368,6 @@ export function ExpertDetail({ expertId, user, onBack, onBookingSuccess }: Exper
                         </>
                       )}
                     </button>
-                    <p className="md:col-span-2 text-[9px] text-center text-text-muted uppercase tracking-[0.2em] mt-2">
-                      By confirming, you agree to our standard professional session terms.
-                    </p>
                   </form>
                 )}
               </div>

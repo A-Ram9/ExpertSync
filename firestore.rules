@@ -32,7 +32,7 @@ service cloud.firestore {
     match /slots/{slotId} {
       allow read: if true;
       allow create: if isAdmin();
-      
+
       function isValidSlot(data) {
         return data.expertId is string && data.expertId.size() <= 128
           && data.date is string && data.date.size() <= 32
@@ -40,19 +40,22 @@ service cloud.firestore {
           && data.isBooked is bool;
       }
 
-      // Users can only "book" a slot if it's currently free
-      // This is a simplified rule; in a real app we'd use a transaction and verify the booking doc
+      // Users can only "book" a slot if it's currently free, they are
+      // signed in, and they are booking it for themselves (no impersonation).
       allow update: if (
-        isValidSlot(request.resource.data)
+        isSignedIn()
+        && isValidSlot(request.resource.data)
         && (
           // Action: Book a slot
-          (resource.data.isBooked == false && request.resource.data.isBooked == true 
+          (resource.data.isBooked == false && request.resource.data.isBooked == true
+           && request.resource.data.bookedBy == request.auth.token.email
            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isBooked', 'bookedBy', 'bookingId']))
         )
       );
     }
 
-    // Bookings: Owner read/write, restricted creation
+    // Bookings: Owner-only read/write. Creation requires a signed-in user
+    // booking under their own verified email address.
     match /bookings/{bookingId} {
       function isValidBooking(data) {
         return data.expertId is string && data.expertId.size() <= 128
@@ -63,9 +66,14 @@ service cloud.firestore {
           && data.status is string && data.status in ['Pending', 'Confirmed', 'Completed'];
       }
 
-      allow create: if isValidBooking(request.resource.data) && request.resource.data.status == 'Confirmed';
-      allow read: if request.query.limit <= 100 && (resource.data.userEmail == request.auth.token.email || true); // Simplified for this demo
-      allow list: if request.query.limit <= 100 && (request.query.filters.userEmail == request.auth.token.email || true);
+      allow create: if isSignedIn()
+        && isValidBooking(request.resource.data)
+        && request.resource.data.status == 'Confirmed'
+        && request.resource.data.userEmail == request.auth.token.email;
+      allow read: if isSignedIn() && resource.data.userEmail == request.auth.token.email;
+      allow list: if isSignedIn()
+        && request.query.limit <= 100
+        && request.query.filters.userEmail == request.auth.token.email;
     }
   }
 }

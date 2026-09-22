@@ -1,53 +1,48 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, orderBy, onSnapshot, getDocs } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Booking } from '../types';
-import { Calendar, Clock, MapPin, CheckCircle2, CircleDashed, CheckCircle, Search, Loader2, User } from 'lucide-react';
+import { Calendar, Clock, CheckCircle2, CircleDashed, CheckCircle, Loader2, User, LogIn, ShieldCheck } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { format } from 'date-fns';
 import { motion } from 'motion/react';
+import { toast } from 'sonner';
 
-export function MyBookings({ user }: { user: any }) {
+export function MyBookings({ user, onSignIn }: { user: any; onSignIn: () => void }) {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(false);
-  const [searchEmail, setSearchEmail] = useState(user?.email || '');
-  const [hasSearched, setHasSearched] = useState(!!user?.email);
 
   useEffect(() => {
-    if (user?.email) {
-      fetchBookings(user.email);
+    if (!user?.email) {
+      setBookings([]);
+      return;
     }
-  }, [user]);
 
-  const fetchBookings = async (email: string) => {
-    if (!email) return;
     setLoading(true);
-    setHasSearched(true);
-    
-    try {
-      const q = query(
-        collection(db, 'bookings'),
-        where('userEmail', '==', email),
-        orderBy('createdAt', 'desc')
-      );
-      
-      const unsubscribe = onSnapshot(q, (snapshot) => {
+    // Firestore security rules only permit a signed-in user to read their
+    // own bookings (matched by their verified auth email), so this can
+    // never surface another person's data.
+    const q = query(
+      collection(db, 'bookings'),
+      where('userEmail', '==', user.email),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
         const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Booking));
         setBookings(data);
         setLoading(false);
-      });
+      },
+      (error) => {
+        console.error("Error fetching bookings:", error);
+        toast.error('Unable to load your bookings right now.');
+        setLoading(false);
+      }
+    );
 
-      return () => unsubscribe();
-    } catch (error) {
-      console.error("Error fetching bookings:", error);
-      setLoading(false);
-    }
-  };
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    fetchBookings(searchEmail);
-  };
+    return () => unsubscribe();
+  }, [user]);
 
   const getStatusDisplay = (status: Booking['status']) => {
     switch (status) {
@@ -70,33 +65,34 @@ export function MyBookings({ user }: { user: any }) {
           <p className="text-text-secondary text-sm italic font-serif">A comprehensive record of your professional consultations.</p>
         </div>
 
-        {!user && (
-          <form onSubmit={handleSearch} className="flex gap-3 w-full md:w-auto">
-            <div className="relative flex-1 sm:w-80 group">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted group-focus-within:text-accent transition-colors" />
-              <input 
-                type="email" 
-                placeholder="Lookup by email address..."
-                value={searchEmail}
-                onChange={(e) => setSearchEmail(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 bg-bg-card border border-border-dim rounded-xl text-sm text-text-primary focus:outline-none focus:border-accent transition-all placeholder:text-text-muted"
-              />
-            </div>
-            <button 
-              type="submit"
-              className="bg-accent text-bg-main px-8 py-3 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-accent/90 transition-all shadow-xl shadow-accent/10"
-            >
-              Search
-            </button>
-          </form>
+        {user && (
+          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-accent/70 px-4 py-2 border border-accent/20 rounded-full">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            Verified for {user.email}
+          </div>
         )}
       </div>
 
-      {loading ? (
+      {!user ? (
+        <div className="py-32 text-center bg-bg-card rounded-[3rem] border border-dashed border-border-dim">
+          <div className="inline-flex items-center justify-center w-24 h-24 bg-white/5 rounded-full mb-6">
+            <ShieldCheck className="w-10 h-10 text-text-muted" />
+          </div>
+          <h3 className="text-2xl font-serif text-text-primary mb-2">Access Your Records</h3>
+          <p className="text-text-secondary text-sm italic mb-8">Sign in to securely retrieve your consultation ledger. For your privacy, bookings are only ever visible to their owner.</p>
+          <button
+            onClick={onSignIn}
+            className="inline-flex items-center gap-2 bg-accent text-bg-main px-8 py-3 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-accent/90 transition-all shadow-xl shadow-accent/10"
+          >
+            <LogIn className="w-4 h-4" />
+            Sign In
+          </button>
+        </div>
+      ) : loading ? (
         <div className="py-32 flex justify-center">
             <Loader2 className="w-10 h-10 animate-spin text-accent" />
         </div>
-      ) : hasSearched ? (
+      ) : (
         bookings.length > 0 ? (
           <div className="space-y-4">
             {bookings.map((booking, i) => {
@@ -153,11 +149,6 @@ export function MyBookings({ user }: { user: any }) {
             <p className="text-text-secondary text-sm italic">You currently have no recorded sessions associated with this identity.</p>
           </div>
         )
-      ) : (
-        <div className="py-32 text-center bg-bg-card rounded-[3rem] border border-dashed border-border-dim">
-          <h3 className="text-2xl font-serif text-text-primary mb-2">Access Your Records</h3>
-          <p className="text-text-secondary text-sm italic">Sign in or provide your alias to retrieve your consultation ledger.</p>
-        </div>
       )}
     </div>
   );
